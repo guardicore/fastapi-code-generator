@@ -1,11 +1,13 @@
 import re
+import json
 from datetime import datetime, timezone
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 import typer
-from datamodel_code_generator import DataModelType, LiteralType, PythonVersion, chdir
+from datamodel_code_generator import DataModelType, LiteralType, PythonVersion, chdir, DatetimeClassType
 from datamodel_code_generator.format import CodeFormatter
 from datamodel_code_generator.imports import Import, Imports
 from datamodel_code_generator.model import get_data_model_types
@@ -65,14 +67,37 @@ def main(
     python_version: PythonVersion = typer.Option(
         PythonVersion.PY_39.value, "--python-version", "-p"
     ),
+    capitalise_enum_members: bool = typer.Option(False, "--capitalise-enum-members"),
+    output_datetime_class: Optional[DatetimeClassType] = typer.Option(
+        DatetimeClassType.Datetime, "--output-datetime-class",
+        help="Specify the datetime class to use for datetime fields"
+    ),
+    allow_population_by_field_name: bool = typer.Option(False, "--allow-population-by-field-name"),
+    extra_template_data: str = typer.Option(None, "--extra-template-data"),
+    additional_imports: str = typer.Option(None, "--additional-imports"),
 ) -> None:
     input_name: str = input_file
-    input_text: str
+    input_text: str = None
 
-    with open(input_file, encoding=encoding) as f:
-        input_text = f.read()
+    input_name = Path(input_name).expanduser().resolve()
+
+    try:
+        with open(input_file, encoding=encoding) as f:
+            input_text = f.read()
+    except:
+        pass
+
+    if extra_template_data:
+        try:
+            with open(extra_template_data, encoding=encoding) as f:
+                extra_template_data = json.load(f, object_hook=lambda d: defaultdict(dict, **d))
+        except Exception as exc:
+            print(f"could not load extra: {exc}")
 
     model_path = Path(model_file) if model_file else MODEL_PATH  # pragma: no cover
+
+    if additional_imports:
+        additional_imports = additional_imports.split(",")
 
     return generate_code(
         input_name,
@@ -89,6 +114,11 @@ def main(
         specify_tags=specify_tags,
         output_model_type=output_model_type,
         python_version=python_version,
+        capitalise_enum_members=capitalise_enum_members,
+        output_datetime_class=output_datetime_class,
+        allow_population_by_field_name=allow_population_by_field_name,
+        extra_template_data=extra_template_data,
+        additional_imports=additional_imports
     )
 
 
@@ -100,7 +130,6 @@ def _get_most_of_reference(data_type: DataType) -> Optional[Reference]:
         if reference:
             return reference
     return None
-
 
 def generate_code(
     input_name: str,
@@ -117,6 +146,11 @@ def generate_code(
     specify_tags: Optional[str] = None,
     output_model_type: DataModelType = DataModelType.PydanticBaseModel,
     python_version: PythonVersion = PythonVersion.PY_39,
+    capitalise_enum_members: bool = False,
+    output_datetime_class: Optional[DatetimeClassType] = None,
+    extra_template_data: defaultdict[str, dict[str, Any]] | None = None,
+    allow_population_by_field_name: Optional[bool] = False,
+    additional_imports: Optional[list[str]] = None
 ) -> None:
     if not model_path:
         model_path = MODEL_PATH
@@ -132,8 +166,10 @@ def generate_code(
         custom_visitors = []
     data_model_types = get_data_model_types(output_model_type, python_version)
 
+    source = input_text or input_name
+
     parser = OpenAPIParser(
-        input_text,
+        source=source,
         enum_field_as_literal=enum_field_as_literal,
         data_model_type=data_model_types.data_model,
         data_model_root_type=data_model_types.root_model,
@@ -142,6 +178,13 @@ def generate_code(
         dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
         custom_template_dir=model_template_dir,
         target_python_version=python_version,
+        additional_imports=additional_imports,
+        base_path=Path(input_name).absolute().parent,
+        capitalise_enum_members=capitalise_enum_members,
+        output_datetime_class=output_datetime_class,
+        extra_template_data=extra_template_data,
+        allow_population_by_field_name=allow_population_by_field_name,
+        field_extra_keys={"union_mode"}
     )
 
     with chdir(output_dir):
@@ -153,7 +196,7 @@ def generate_code(
         modules = {output_dir / model_path.with_suffix('.py'): (models, input_name)}
     else:
         modules = {
-            output_dir / model_path / module_name[0]: (model.body, input_name)
+            output_dir / model_path / Path(*module_name): (model.body, input_name)
             for module_name, model in models.items()
         }
 

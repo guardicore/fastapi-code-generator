@@ -27,6 +27,7 @@ from datamodel_code_generator import (
     OpenAPIScope,
     PythonVersion,
     snooper_to_methods,
+    DatetimeClassType,
 )
 from datamodel_code_generator.imports import Import, Imports
 from datamodel_code_generator.model import DataModel, DataModelFieldBase
@@ -51,7 +52,7 @@ RE_APPLICATION_JSON_PATTERN: Pattern[str] = re.compile(r'^application/.*json$')
 class CachedPropertyModel(BaseModel):
     class Config:
         arbitrary_types_allowed = True
-        keep_untouched = (cached_property,)
+        ignored_types = (cached_property,)
 
 
 class Response(BaseModel):
@@ -265,6 +266,9 @@ class OpenAPIParser(OpenAPIModelParser):
         custom_class_name_generator: Optional[Callable[[str], str]] = None,
         field_extra_keys: Optional[Set[str]] = None,
         field_include_all_keys: bool = False,
+        capitalise_enum_members: bool = False,
+        additional_imports: List[str] = None,
+        output_datetime_class: Optional[DatetimeClassType] = None,
     ):
         super().__init__(
             source=source,
@@ -282,6 +286,7 @@ class OpenAPIParser(OpenAPIModelParser):
             snake_case_field=snake_case_field,
             strip_default_none=strip_default_none,
             aliases=aliases,
+            additional_imports=additional_imports,
             allow_population_by_field_name=allow_population_by_field_name,
             apply_default_values_for_required_fields=apply_default_values_for_required_fields,
             force_optional_for_required_fields=force_optional_for_required_fields,
@@ -304,6 +309,8 @@ class OpenAPIParser(OpenAPIModelParser):
             field_extra_keys=field_extra_keys,
             field_include_all_keys=field_include_all_keys,
             openapi_scopes=[OpenAPIScope.Schemas, OpenAPIScope.Paths],
+            capitalise_enum_members=capitalise_enum_members,
+            target_datetime_class=output_datetime_class
         )
         self.operations: Dict[str, Operation] = {}
         self._temporary_operation: Dict[str, Any] = {}
