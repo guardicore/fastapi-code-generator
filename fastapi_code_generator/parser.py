@@ -28,7 +28,7 @@ from datamodel_code_generator import (
     snooper_to_methods,
 )
 from datamodel_code_generator.enums import StrictTypes
-from datamodel_code_generator.format import PythonVersion
+from datamodel_code_generator.format import PythonVersion, DatetimeClassType
 from datamodel_code_generator.imports import Import, Imports
 from datamodel_code_generator.model import DataModel, DataModelFieldBase
 from datamodel_code_generator.model import pydantic_v2 as pydantic_model
@@ -415,6 +415,9 @@ class OpenAPIParser(OpenAPIModelParser):
         custom_class_name_generator: Optional[Callable[[str], str]] = None,
         field_extra_keys: Optional[Set[str]] = None,
         field_include_all_keys: bool = False,
+        capitalise_enum_members: bool = False,
+        additional_imports: Optional[List[str]] = None,
+        output_datetime_class: Optional[DatetimeClassType] = None,
         include_request_argument: bool = False,
         allow_remote_refs: Optional[bool] = None,
         allow_private_network: bool = False,
@@ -438,6 +441,9 @@ class OpenAPIParser(OpenAPIModelParser):
             snake_case_field=snake_case_field,
             strip_default_none=strip_default_none,
             aliases=aliases,
+            additional_imports=additional_imports,
+            capitalise_enum_members=capitalise_enum_members,
+            target_datetime_class=output_datetime_class,
             allow_population_by_field_name=allow_population_by_field_name,
             apply_default_values_for_required_fields=apply_default_values_for_required_fields,
             force_optional_for_required_fields=force_optional_for_required_fields,

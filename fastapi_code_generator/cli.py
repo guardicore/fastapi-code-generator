@@ -1,7 +1,9 @@
 import re
 import sys
+import json
 from datetime import datetime, timezone
 from functools import lru_cache
+from collections import defaultdict
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -10,7 +12,7 @@ import typer
 from click import Abort, ClickException, Command
 from datamodel_code_generator import LiteralType, chdir
 from datamodel_code_generator.enums import DataModelType
-from datamodel_code_generator.format import CodeFormatter, PythonVersion
+from datamodel_code_generator.format import CodeFormatter, PythonVersion, DatetimeClassType
 from datamodel_code_generator.model import get_data_model_types
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typer.main import get_command
@@ -174,15 +176,36 @@ def main(
             "fields are hashable."
         ),
     ),
+    capitalise_enum_members: bool = typer.Option(False, "--capitalise-enum-members"),
+    output_datetime_class: Optional[DatetimeClassType] = typer.Option(
+        DatetimeClassType.Datetime, "--output-datetime-class",
+        help="Specify the datetime class to use for datetime fields"
+    ),
+    allow_population_by_field_name: bool = typer.Option(False, "--allow-population-by-field-name"),
+    extra_template_data: str = typer.Option(None, "--extra-template-data"),
+    additional_imports: str = typer.Option(None, "--additional-imports"),
 ) -> None:
     del version
-    input_name: str = Path(input_file).name
-    input_text: str
+    input_name = Path(input_file).expanduser().resolve()
+    input_text: Optional[str] = None
 
-    with open(input_file, encoding=encoding) as f:
-        input_text = f.read()
+    try:
+        with open(input_file, encoding=encoding) as f:
+            input_text = f.read()
+    except:
+        pass
+
+    if extra_template_data:
+        try:
+            with open(extra_template_data, encoding=encoding) as f:
+                extra_template_data = json.load(f, object_hook=lambda d: defaultdict(dict, **d))
+        except Exception as exc:
+            print(f"could not load extra: {exc}")
 
     model_path = Path(model_file) if model_file else MODEL_PATH  # pragma: no cover
+
+    if additional_imports:
+        additional_imports = additional_imports.split(",")
 
     return generate_code(
         input_name,
@@ -206,6 +229,11 @@ def main(
         use_annotated=use_annotated,
         reuse_model=reuse_model,
         enable_faux_immutability=enable_faux_immutability,
+        capitalise_enum_members=capitalise_enum_members,
+        output_datetime_class=output_datetime_class,
+        allow_population_by_field_name=allow_population_by_field_name,
+        extra_template_data=extra_template_data,
+        additional_imports=additional_imports
     )
 
 
@@ -249,6 +277,11 @@ def generate_code(
     use_annotated: bool = False,
     reuse_model: bool = False,
     enable_faux_immutability: bool = False,
+    capitalise_enum_members: bool = False,
+    output_datetime_class: Optional[DatetimeClassType] = None,
+    extra_template_data: defaultdict[str, dict[str, Any]] | None = None,
+    allow_population_by_field_name: Optional[bool] = False,
+    additional_imports: Optional[list[str]] = None
 ) -> None:
     global all_tags
     if not model_path:  # pragma: no cover
@@ -268,9 +301,9 @@ def generate_code(
     allow_remote_refs, allow_private_network = _resolve_remote_reference_options(
         allow_remote_refs, allow_private_network
     )
-
+    source = input_text or input_name
     parser = OpenAPIParser(
-        input_text,
+        source=source,
         enum_field_as_literal=enum_field_as_literal,
         data_model_type=data_model_types.data_model,
         data_model_root_type=data_model_types.root_model,
@@ -286,6 +319,13 @@ def generate_code(
         use_annotated=use_annotated,
         reuse_model=reuse_model,
         enable_faux_immutability=enable_faux_immutability,
+        additional_imports=additional_imports,
+        base_path=Path(input_name).absolute().parent,
+        capitalise_enum_members=capitalise_enum_members,
+        output_datetime_class=output_datetime_class,
+        extra_template_data=extra_template_data,
+        allow_population_by_field_name=allow_population_by_field_name,
+        field_extra_keys={"union_mode"}
     )
 
     with chdir(output_dir):
@@ -305,7 +345,7 @@ def generate_code(
         modules = {
             output_dir
             / model_path
-            / module_name[0]: (
+            / Path(*module_name): (
                 code_formatter.format_code(model.body),
                 input_name,
             )

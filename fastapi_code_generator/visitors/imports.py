@@ -68,8 +68,9 @@ def get_imports(parser: OpenAPIParser, model_path: Path) -> Dict[str, object]:
         if references:
             imports.append(data_type.all_imports)
         for reference in references:
+            reference_path = _get_path_of_reference(model_path, reference)
             imports.append(
-                Import.from_full_path(f'.{model_path.stem}.{reference.name}')
+                Import.from_full_path(f'.{reference_path}.{reference.name}')
             )
     for from_, imports_ in parser.imports_for_fastapi.items():
         imports[from_].update(imports_)
@@ -78,6 +79,18 @@ def get_imports(parser: OpenAPIParser, model_path: Path) -> Dict[str, object]:
             imports.alias.update(operation.imports.alias)
     _remove_unused_imports(imports, _collect_used_names(parser))
     return {'imports': imports}
+
+def _get_path_of_reference(model_path, reference):
+    m_path = model_path.stem
+    try:
+        yaml, *_ = reference.path.split('#')
+        mod, *_ = yaml.split('.')
+        mod_parts = [m for m in mod.split('/') if m]
+        if mod_parts:
+            return f"{m_path}.{'.'.join(mod_parts)}"
+    except Exception:
+        pass
+    return m_path
 
 
 visit: Visitor = get_imports

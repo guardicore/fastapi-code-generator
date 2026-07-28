@@ -28,7 +28,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
   "click>=8.1.8,<8.2",
-  "datamodel-code-generator[http]>=0.61,<0.66",
+  "datamodel-code-generator @ git+https://github.com/guardicore/datamodel-code-generator.git@centra_contracts_v2",
   "jinja2>=2.11.2,<4",
   "pydantic>=2.12,<3",
   "pysnooper>=0.4.1,<2",
@@ -89,6 +89,9 @@ type = [
   "mypy>=1.13",
   "types-jinja2>=2.11.9",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 source = "vcs"
